@@ -6,6 +6,9 @@ on:
     - cron: '33 7 * * 1-5'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-analysis:
     runs-on: ubuntu-latest
@@ -13,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -29,3 +34,22 @@ jobs:
           GCP_KEYS: ${{ secrets.GCP_KEYS }}
         run: |
           python main.py
+
+      - name: Prevent workflow suspension
+        run: |
+          # 最終コミットのUNIXタイムスタンプを取得
+          LAST_COMMIT_TIME=$(git log -1 --format=%ct)
+          # 現在のUNIXタイムスタンプを取得
+          CURRENT_TIME=$(date +%s)
+          # 経過日数を計算 (86400秒 = 1日)
+          DIFF_DAYS=$(( (CURRENT_TIME - LAST_COMMIT_TIME) / 86400 ))
+          
+          if [ "$DIFF_DAYS" -ge 50 ]; then
+            echo "最終更新から ${DIFF_DAYS} 日経過しているため、空コミットを作成します。"
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: prevent workflow suspension"
+            git push
+          else
+            echo "最終更新から ${DIFF_DAYS} 日経過。空コミットは不要です。"
+          fi
